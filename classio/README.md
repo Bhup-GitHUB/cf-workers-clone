@@ -1,4 +1,4 @@
-# classion-workers
+# classio
 
 To install dependencies:
 
