@@ -1,73 +1,71 @@
-import { VM } from 'vm2';
+import { config } from './config';
+import * as cache from './cache';
+import { execute } from './sandbox';
 
-const codeCache = new Map<string, string>();
+async function fetchCode(subdomain: string): Promise<string | null> {
+  const response = await fetch(`${config.apiUrl}/code/${subdomain}`);
+  if (!response.ok) {
+    return null;
+  }
+  return response.text();
+}
+
+function extractSubdomain(host: string): string | null {
+  const parts = host.split('.');
+  if (parts.length < 2) {
+    return null;
+  }
+  const subdomain = parts[0];
+  if (subdomain === 'localhost' || subdomain.includes(':')) {
+    return null;
+  }
+  return subdomain;
+}
 
 const server = Bun.serve({
-  port: 3001,
+  port: config.port,
   async fetch(req) {
     const url = new URL(req.url);
 
     if (url.pathname === '/invalidate' && req.method === 'POST') {
-      const { subdomain } = await req.json();
-      codeCache.delete(subdomain);
-      return Response.json({ success: true });
+      try {
+        const body = await req.json() as { subdomain: string };
+        cache.invalidate(body.subdomain);
+        return Response.json({ success: true });
+      } catch {
+        return Response.json({ error: 'Invalid request' }, { status: 400 });
+      }
     }
 
     const host = req.headers.get('host') || '';
-    const subdomain = host.split('.')[0];
+    const subdomain = extractSubdomain(host);
 
-    if (!subdomain || subdomain === 'localhost:3001') {
-      return new Response('Runtime Worker - Specify subdomain', { status: 400 });
+    if (!subdomain) {
+      return new Response('Subdomain required', { status: 400 });
+    }
+
+    let code = cache.get(subdomain);
+
+    if (!code) {
+      code = await fetchCode(subdomain) ?? undefined;
+      if (!code) {
+        return new Response(`App not found: ${subdomain}`, { status: 404 });
+      }
+      cache.set(subdomain, code);
     }
 
     try {
-      let code = codeCache.get(subdomain);
-      
-      if (!code) {
-        const response = await fetch(`http://localhost:3000/code/${subdomain}`);
-        if (!response.ok) {
-          return new Response(`App not found: ${subdomain}`, { status: 404 });
-        }
-        code = await response.text();
-        codeCache.set(subdomain, code);
+      return await execute(code, req);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Unknown error';
+      const stack = err instanceof Error ? err.stack : '';
+      console.error(`Execution error for ${subdomain}:`, message);
+      if (stack) {
+        console.error('Stack trace:', stack);
       }
-
-      const result = await executeInSandbox(code, req);
-      return result;
-
-    } catch (error: any) {
-      console.error(`Error executing ${subdomain}:`, error);
-      return new Response(`Execution error: ${error.message}`, { status: 500 });
+      return new Response(`Execution error: ${message}`, { status: 500 });
     }
   },
 });
 
-async function executeInSandbox(code: string, request: Request): Promise<Response> {
-  const vm = new VM({
-    timeout: 5000,
-    sandbox: {
-      console,
-      fetch,
-      Request,
-      Response,
-      URL,
-    },
-  });
-
-  try {
-    const userHandler = vm.run(`
-      ${code}
-      (typeof handler !== 'undefined' ? handler : (typeof app !== 'undefined' ? app : null))
-    `);
-
-    if (!userHandler) {
-      throw new Error('No handler exported from user code');
-    }
-
-    return await userHandler(request);
-  } catch (error: any) {
-    throw new Error(`Sandbox execution failed: ${error.message}`);
-  }
-}
-
-console.log(`Runtime Worker running on http://localhost:${server.port}`);
+console.log(`Runtime worker running on port ${server.port}`);

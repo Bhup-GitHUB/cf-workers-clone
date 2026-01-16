@@ -8,8 +8,7 @@
     "dev": "bun --watch src/index.ts"
   },
   "dependencies": {
-    "bun": "latest",
-    "vm2": "^3.10.1"
+    "bun": "latest"
   },
   "devDependencies": {
     "@types/node": "^20.10.0",
