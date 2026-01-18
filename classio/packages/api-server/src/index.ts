@@ -10,6 +10,26 @@ const server = Bun.serve({
       return handleDeploy(req);
     }
 
+    if (url.pathname === '/tls-check' && req.method === 'GET') {
+      const domain = url.searchParams.get('domain');
+      
+      if (!domain || !domain.endsWith('.bhup-workers.space')) {
+        return new Response('Denied', { status: 403 });
+      }
+      
+      // Extract subdomain (e.g., "nndsdn" from "nndsdn.bhup-workers.space")
+      const subdomain = domain.replace('.bhup-workers.space', '');
+      
+      // Don't allow 'api' subdomain (that's for the API server)
+      if (subdomain === 'api') {
+        return new Response('Denied', { status: 403 });
+      }
+      
+      // TODO: Check if subdomain exists in your database (optional security)
+      // For now, allow all non-api subdomains
+      return new Response('OK', { status: 200 });
+    }
+
     if (url.pathname.startsWith('/code/')) {
       const subdomain = url.pathname.split('/')[2];
       if (subdomain) {
