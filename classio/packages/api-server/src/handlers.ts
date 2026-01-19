@@ -45,9 +45,12 @@ export async function handleDeploy(req: Request): Promise<Response> {
             body: JSON.stringify({ subdomain }),
         });
 
+        // Determine the protocol based on the base domain
+        const protocol = config.baseDomain.includes('localhost') ? 'http' : 'https';
+        
         return Response.json({
             success: true,
-            url: `http://${subdomain}.localhost:${config.port + 1}`,
+            url: `${protocol}://${subdomain}.${config.baseDomain}`,
         });
     } catch (err) {
         const message = err instanceof Error ? err.message : 'Unknown error';
