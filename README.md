@@ -1,4 +1,4 @@
-![Demo](demoooo.gif)
+![Demo](demo.gif)
 
 # Cloudflare Workers Clone
 
