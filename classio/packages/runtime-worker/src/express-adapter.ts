@@ -115,6 +115,7 @@ async function createMockRequest(fetchRequest: Request): Promise<MockRequest> {
     originalUrl: url.pathname + url.search,
     cookies,
     get(name: string) { return headers[name.toLowerCase()]; },
+    //@ts-ignore
     header(name: string) { return this.get(name); },
   };
 }
