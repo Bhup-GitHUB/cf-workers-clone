@@ -1,44 +1,55 @@
 import { build } from 'bun';
 import path from 'path';
-import fs from 'fs';
 import { config } from './config';
+import { detectFramework, resolveEntrypoint } from './detect-framework';
+import { runNativeModuleCheck, validateEntrypointExport } from './preflight';
+import type { AppFramework, DeployResponse } from '../../shared/src';
 
 interface DeployOptions {
     subdomain: string;
     username: string;
+    entry?: string;
 }
 
-interface DeployResult {
-    success: boolean;
-    url?: string;
-    error?: string;
+interface BuildArtifact {
+    code: string;
+    bundledFile: string;
 }
 
-export async function deploy(options: DeployOptions): Promise<void> {
-    const projectPath = process.cwd();
-    const entryFile = path.join(projectPath, 'index.ts');
-
-    if (!fs.existsSync(entryFile)) {
-        console.error('No index.ts found in current directory');
-        process.exit(1);
-    }
+async function bundleProject(projectPath: string, entryFile: string): Promise<BuildArtifact> {
+    const outputDir = path.join(projectPath, '.classio-build');
+    const outputFile = path.join(outputDir, path.basename(entryFile).replace(/\.(ts|tsx|mts)$/, '.js'));
 
     console.log('Bundling project...');
-
     const buildResult = await build({
         entrypoints: [entryFile],
-        outdir: path.join(projectPath, '.classio-build'),
+        outdir: outputDir,
         target: 'bun',
         minify: false,
     });
 
     if (!buildResult.success) {
-        console.error('Build failed');
-        process.exit(1);
+        throw new Error('Build failed');
     }
 
-    const bundledFile = path.join(projectPath, '.classio-build', 'index.js');
-    const code = await Bun.file(bundledFile).text();
+    const code = await Bun.file(outputFile).text();
+    return { code, bundledFile: outputFile };
+}
+
+export async function deploy(options: DeployOptions): Promise<void> {
+    const projectPath = process.cwd();
+    const entryFile = resolveEntrypoint(projectPath, options.entry);
+    const framework: AppFramework = detectFramework(projectPath);
+
+    console.log(`Detected entry: ${path.relative(projectPath, entryFile)}`);
+    console.log(`Detected framework: ${framework}`);
+
+    runNativeModuleCheck(projectPath);
+    console.log('Preflight: native dependency check passed');
+
+    const { code, bundledFile } = await bundleProject(projectPath, entryFile);
+    await validateEntrypointExport(bundledFile, framework);
+    console.log('Preflight: export compatibility check passed');
 
     console.log(`Deploying to ${options.subdomain}...`);
 
@@ -49,14 +60,17 @@ export async function deploy(options: DeployOptions): Promise<void> {
             username: options.username,
             subdomain: options.subdomain,
             code,
+            framework,
+            entrypoint: path.relative(projectPath, entryFile),
         }),
     });
 
-    const result: DeployResult = await response.json();
+    const result: DeployResponse = await response.json();
 
     if (result.success) {
         console.log('Deployed successfully');
         console.log(`URL: ${result.url}`);
+        console.log(`Framework: ${result.framework ?? framework}`);
     } else {
         console.error(`Deployment failed: ${result.error}`);
         process.exit(1);

@@ -1,9 +1,10 @@
 import { config } from './config';
-import { handleDeploy, handleGetCode } from './handlers';
+import { handleDeploy, handleGetCode, handleGetDeployment } from './handlers';
+import { deploymentExists } from './db';
 
 const server = Bun.serve({
   port: config.port,
-  async fetch(req) {
+  async fetch(req: Request) {
     const url = new URL(req.url);
 
     if (url.pathname === '/deploy' && req.method === 'POST') {
@@ -24,10 +25,20 @@ const server = Bun.serve({
       if (subdomain === 'api') {
         return new Response('Denied', { status: 403 });
       }
-      
-      // TODO: Check if subdomain exists in your database (optional security)
-      // For now, allow all non-api subdomains
+
+      if (!deploymentExists(subdomain)) {
+        return new Response('Denied', { status: 403 });
+      }
+
       return new Response('OK', { status: 200 });
+    }
+
+    if (url.pathname.startsWith('/deployment/')) {
+      const subdomain = url.pathname.split('/')[2];
+      if (subdomain) {
+        return handleGetDeployment(subdomain);
+      }
+      return new Response('Subdomain required', { status: 400 });
     }
 
     if (url.pathname.startsWith('/code/')) {

@@ -1,15 +1,29 @@
 # test-express
 
-To install dependencies:
+Sample Express backend for Classio one-shot deploy.
+
+## Install
 
 ```bash
 bun install
 ```
 
-To run:
+## Deploy
+
+From this directory:
 
 ```bash
-bun run index.ts
+bun run ../packages/cli/src/index.ts deploy -s test-express
 ```
 
-This project was created using `bun init` in bun v1.3.5. [Bun](https://bun.com) is a fast all-in-one JavaScript runtime.
+Then call the deployed app:
+
+```bash
+curl -i http://test-express.localhost:3001/
+curl -i http://test-express.localhost:3001/api/users
+```
+
+## Notes
+
+- Classio auto-detects this project as Express because `express` is in dependencies.
+- Routes, query strings, JSON body parsing, and cookies are forwarded through the runtime bridge.

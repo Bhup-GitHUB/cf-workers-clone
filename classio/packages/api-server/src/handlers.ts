@@ -1,22 +1,37 @@
 import { config } from './config';
-import { saveDeployment, getDeploymentCode } from './db';
+import { saveDeployment, getDeploymentCode, getDeploymentMetadata } from './db';
+import type { AppFramework, DeployRequest } from '../../shared/src';
 
-interface DeployRequest {
-    username: string;
-    subdomain: string;
-    code: string;
-}
+const SUBDOMAIN_PATTERN = /^[a-z0-9](?:[a-z0-9-]{1,61}[a-z0-9])?$/;
+const RESERVED_SUBDOMAINS = new Set(['api', 'www', 'admin']);
+const MAX_CODE_BYTES = 5 * 1024 * 1024;
 
-function isValidDeployRequest(body: unknown): body is DeployRequest {
+export function isValidDeployRequest(body: unknown): body is DeployRequest {
     if (typeof body !== 'object' || body === null) {
         return false;
     }
-    const req = body as Record<string, unknown>;
-    return (
-        typeof req.username === 'string' &&
-        typeof req.subdomain === 'string' &&
-        typeof req.code === 'string'
-    );
+    const req = body as DeployRequest;
+
+    if (typeof req.username !== 'string' || req.username.trim().length === 0 || req.username.length > 64) {
+        return false;
+    }
+    if (typeof req.subdomain !== 'string' || !SUBDOMAIN_PATTERN.test(req.subdomain)) {
+        return false;
+    }
+    if (RESERVED_SUBDOMAINS.has(req.subdomain)) {
+        return false;
+    }
+    if (typeof req.code !== 'string' || req.code.length === 0) {
+        return false;
+    }
+    if (new TextEncoder().encode(req.code).byteLength > MAX_CODE_BYTES) {
+        return false;
+    }
+    if (req.framework !== undefined && req.framework !== 'fetch' && req.framework !== 'express') {
+        return false;
+    }
+
+    return true;
 }
 
 export async function handleDeploy(req: Request): Promise<Response> {
@@ -29,15 +44,16 @@ export async function handleDeploy(req: Request): Promise<Response> {
 
     if (!isValidDeployRequest(body)) {
         return Response.json(
-            { error: 'Missing required fields: username, subdomain, code' },
+            { error: 'Invalid deployment payload' },
             { status: 400 }
         );
     }
 
     const { username, subdomain, code } = body;
+    const framework: AppFramework = body.framework ?? 'fetch';
 
     try {
-        saveDeployment(username, subdomain, code);
+        saveDeployment(username, subdomain, code, framework);
 
         await fetch(`${config.runtimeUrl}/invalidate`, {
             method: 'POST',
@@ -51,6 +67,7 @@ export async function handleDeploy(req: Request): Promise<Response> {
         return Response.json({
             success: true,
             url: `${protocol}://${subdomain}.${config.baseDomain}`,
+            framework,
         });
     } catch (err) {
         const message = err instanceof Error ? err.message : 'Unknown error';
@@ -68,4 +85,14 @@ export function handleGetCode(subdomain: string): Response {
     return new Response(code, {
         headers: { 'Content-Type': 'application/javascript' },
     });
+}
+
+export function handleGetDeployment(subdomain: string): Response {
+    const metadata = getDeploymentMetadata(subdomain);
+
+    if (!metadata) {
+        return Response.json({ error: 'Not found' }, { status: 404 });
+    }
+
+    return Response.json(metadata);
 }

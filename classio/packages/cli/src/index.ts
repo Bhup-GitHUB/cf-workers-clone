@@ -9,6 +9,7 @@ const { values, positionals } = parseArgs({
   options: {
     subdomain: { type: 'string', short: 's' },
     username: { type: 'string', short: 'u', default: 'classio' },
+    entry: { type: 'string', short: 'e' },
     help: { type: 'boolean', short: 'h' },
   },
   allowPositionals: true,
@@ -23,6 +24,7 @@ function printUsage(): void {
   console.log('Options:');
   console.log('  -s, --subdomain   Subdomain to deploy to');
   console.log('  -u, --username    Username (default: classio)');
+  console.log('  -e, --entry       Entrypoint file (optional)');
   console.log('  -h, --help        Show help');
 }
 
@@ -37,8 +39,9 @@ async function main(): Promise<void> {
   if (command === 'deploy') {
     const subdomain = values.subdomain || path.basename(process.cwd());
     const username = values.username || 'classio';
+    const entry = values.entry;
 
-    await deploy({ subdomain, username });
+    await deploy({ subdomain, username, entry });
   } else {
     console.error(`Unknown command: ${command}`);
     printUsage();

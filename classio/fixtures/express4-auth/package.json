@@ -1,0 +1,9 @@
+{
+  "name": "express4-auth-fixture",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "express": "^4.21.2",
+    "jsonwebtoken": "^9.0.2"
+  }
+}

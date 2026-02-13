@@ -1,13 +1,26 @@
-const cache = new Map<string, string>();
+import type { DeploymentMetadata } from '../../shared/src';
 
-export function get(subdomain: string): string | undefined {
-    return cache.get(subdomain);
+const codeCache = new Map<string, string>();
+const metadataCache = new Map<string, DeploymentMetadata>();
+
+export function getCode(subdomain: string): string | undefined {
+    return codeCache.get(subdomain);
 }
 
-export function set(subdomain: string, code: string): void {
-    cache.set(subdomain, code);
+export function setCode(subdomain: string, code: string): void {
+    codeCache.set(subdomain, code);
+}
+
+export function getMetadata(subdomain: string): DeploymentMetadata | undefined {
+    return metadataCache.get(subdomain);
+}
+
+export function setMetadata(metadata: DeploymentMetadata): void {
+    metadataCache.set(metadata.subdomain, metadata);
+    codeCache.set(metadata.subdomain, metadata.code);
 }
 
 export function invalidate(subdomain: string): void {
-    cache.delete(subdomain);
+    codeCache.delete(subdomain);
+    metadataCache.delete(subdomain);
 }

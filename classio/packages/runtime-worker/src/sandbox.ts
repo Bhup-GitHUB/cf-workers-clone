@@ -7,14 +7,30 @@ import { randomUUID } from 'crypto';
 
 type RequestHandler = (request: Request) => Promise<Response> | Response;
 
-export async function execute(code: string, request: Request): Promise<Response> {
+export async function loadUserHandler(code: string): Promise<unknown> {
     const tempFile = join(tmpdir(), `classio-${randomUUID()}.js`);
 
     try {
         await writeFile(tempFile, code);
 
         const module = await import(tempFile);
-        const userHandler = module.default || module.handler || module.app;
+        return module.default || module.handler || module.app;
+    } catch (err) {
+        if (err instanceof Error) {
+            throw err;
+        }
+        throw new Error(`Unknown error during module load: ${String(err)}`);
+    } finally {
+        try {
+            await unlink(tempFile);
+        } catch {
+        }
+    }
+}
+
+export async function execute(code: string, request: Request): Promise<Response> {
+    try {
+        const userHandler = await loadUserHandler(code);
 
         if (!userHandler) {
             throw new Error('No handler exported. Export a default function, handler, or app.');
@@ -40,10 +56,5 @@ export async function execute(code: string, request: Request): Promise<Response>
             throw err;
         }
         throw new Error(`Unknown error during execution: ${String(err)}`);
-    } finally {
-        try {
-            await unlink(tempFile);
-        } catch {
-        }
     }
 }
